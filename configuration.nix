@@ -1,18 +1,27 @@
 { config, pkgs, lib, ... }:
+let
+  home-manager = builtins.fetchGit {
+    url = "https://github.com/rycee/home-manager.git";
+    ref = "release-22.05";
+  };
+
+in
 {
+  imports = [
+    <nixpkgs/nixos/modules/installer/sd-card/sd-image-aarch64-installer.nix>
+    (import "${home-manager}/nixos")
+  ];
+
   # NixOS wants to enable GRUB by default
   boot.loader.grub.enable = false;
   # Enables the generation of /boot/extlinux/extlinux.conf
   boot.loader.generic-extlinux-compatible.enable = true;
- 
   # !!! Set to specific linux kernel version
   boot.kernelPackages = pkgs.linuxPackages_5_4;
-
   # !!! Needed for the virtual console to work on the RPi 3, as the default of 16M doesn't seem to be enough.
   # If X.org behaves weirdly (I only saw the cursor) then try increasing this to 256M.
   # On a Raspberry Pi 4 with 4 GB, you should either disable this parameter or increase to at least 64M if you want the USB ports to work.
   boot.kernelParams = ["cma=256M"];
-    
   # File systems configuration for using the installer's partition layout
   fileSystems = {
     # Prior to 19.09, the boot partition was hosted on the smaller first partition
@@ -29,41 +38,13 @@
       fsType = "ext4";
     };
   };
-
   # !!! Adding a swap file is optional, but strongly recommended!
   swapDevices = [ { device = "/swapfile"; size = 1024; } ];
 
+
   # systemPackages
-  environment.systemPackages = with pkgs; [ 
-    vim curl wget nano bind kubectl helm iptables openvpn
-    python3 nodejs-12_x docker-compose ];
-
-  services.openssh = {
-      enable = true;
-      permitRootLogin = "yes";
-  };
-
-  # Some sample service.
-  # Use dnsmasq as internal LAN DNS resolver.
-  services.dnsmasq = {
-      enable = false;
-      servers = [ "8.8.8.8" "8.8.4.4" "1.1.1.1" ];
-      extraConfig = ''
-        address=/fenrir.test/192.168.100.6
-        address=/recalune.test/192.168.100.7
-        address=/eth.nixpi.test/192.168.100.3
-        address=/wlan.nixpi.test/192.168.100.4
-      '';
-  };
-
-  # services.openvpn = {
-  #     # You can set openvpn connection
-  #     servers = {
-  #       privateVPN = {
-  #         config = "config /home/nixos/vpn/privatvpn.conf";
-  #       };
-  #     };
-  # };
+  environment.systemPackages = with pkgs; [
+    bat fzf git git-credential-gopass gnupg htop mosh neovim python ripgrep tailscale tree vim  wget ];
 
   programs.zsh = {
       enable = true;
@@ -73,72 +54,63 @@
       };
   };
 
-
-  virtualisation.docker.enable = true;
-
-  networking.firewall.enable = false;
-  
-
-  # WiFi
   hardware = {
     enableRedistributableFirmware = true;
     firmware = [ pkgs.wireless-regdb ];
   };
+
   # Networking
-  networking = {
-    # useDHCP = true;
-    interfaces.wlan0 = {
-      useDHCP = false;
-      ipv4.addresses = [{
-        # I used static IP over WLAN because I want to use it as local DNS resolver
-        address = "192.168.100.4";
-        prefixLength = 24;
-      }];
-    };
-    interfaces.eth0 = {
-      useDHCP = true;
-      # I used DHCP because sometimes I disconnect the LAN cable
-      #ipv4.addresses = [{
-      #  address = "192.168.100.3";
-      #  prefixLength = 24;
-      #}];
-    };
-
-    # Enabling WIFI
-    wireless.enable = true;
-    wireless.interfaces = [ "wlan0" ];
-    # If you want to connect also via WIFI to your router
-    wireless.networks."WIFI-SSID".psk = "wifipass";
-    # You can set default nameservers
-    nameservers = [ "192.168.100.3" "192.168.100.4" "192.168.100.1" ];
-    # You can set default gateway
-    defaultGateway = {
-      address = "192.168.100.1";
-      interface = "wlan0";
+  networking.hostName = "pi-nixos"; # Define your hostname.
+  # WiFi
+  networking.wireless.enable = true;
+  networking.wireless.userControlled.enable = true;
+  networking.wireless.networks = {
+    Get-D445A3 = {
+      pskRaw="665af6c0e84f5c29d57e3abcb57ee62002392fb38546e16bc78c2a51d5fcf4b4";
     };
   };
 
-  # put your own configuration here, for example ssh keys:
-  users.defaultUserShell = pkgs.zsh;
-  users.mutableUsers = true;
-  users.groups = {
-    nixos = {
-      gid = 1000;
-      name = "nixos";
-    };
+  services.openssh = {
+    enable = true;
+    passwordAuthentication = false;
+    permitRootLogin = lib.mkDefault "no";
+    openFirewall = false;
   };
-  users.users = {
-    nixos = {
-      uid = 1000;
-      home = "/home/nixos";
-      name = "nixos";
-      group = "nixos";
-      shell = pkgs.zsh;
-      extraGroups = [ "wheel" "docker" ];
-    };
+
+  # enable the tailscale daemon; this will do a variety of tasks:
+  # 1. create the TUN network device
+  # 2. setup some IP routes to route through the TUN
+  services.tailscale = { enable = true; };
+  networking.firewall.allowedUDPPorts = [ 41641 ];
+  networking.firewall.checkReversePath = "loose";
+
+  # Users
+  users.users.espen = {
+    isNormalUser = true;
+    home = "/home/espen";
+    description = "Espen Trydal";
+    extraGroups = [ "networkmanager" "wheel" ];
+    uid = 1000;
+    shell = pkgs.zsh;
   };
-  users.extraUsers.root.openssh.authorizedKeys.keys = [
+
+  users.users.espen.openssh.authorizedKeys.keys = [
     # This is my public key
-     "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDqlXJv/noNPmZMIfjJguRX3O+Z39xeoKhjoIBEyfeqgKGh9JOv7IDBWlNnd3rHVnVPzB9emiiEoAJpkJUnWNBidL6vPYn13r6Zrt/2WLT6TiUFU026ANdqMjIMEZrmlTsfzFT+OzpBqtByYOGGe19qD3x/29nbszPODVF2giwbZNIMo2x7Ww96U4agb2aSAwo/oQa4jQsnOpYRMyJQqCUhvX8LzvE9vFquLlrSyd8khUsEVV/CytmdKwUUSqmlo/Mn7ge/S12rqMwmLvWFMd08Rg9NHvRCeOjgKB4EI6bVwF8D6tNFnbsGVzTHl7Cosnn75U11CXfQ6+8MPq3cekYr lucernae@lombardia-N43SM"
+    "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDAiaiBQhGCjeFk8EyRFN+pLSxHqNUQNpx8rP3SxqzA+fpTho/pkq+QqoTt0m2qXlmA2KKJQ9ai2uGAm+iiPmRc3908YS91kL9NjpBvlsyakBAWU366GTAZU1oSQHnshSZnJplyKt5gNMbXQMLHWnlWIr9co3jL8KAI+XNnP8ZrwTMSneK8LPhWYp/NldYH1cazEWTagYoTy9NuUrug1wGkmepCR3bY1I+NbFmsFZtYt4YVA9KUvTuTrR1uvirRn4YQdBMfuYXQIPkAVtBRpk0N1EXC2PnOex3tr5h30VcIJCKYqaYhw7Q9lZP/K97+IzfMv1HD7ei8RZc2BR5KcJUkgvmTBwy0os5WlwbJ32qzJulv8kaZ02IQOpo+zK/g+qH9P1IYiSRMFR796t0V2lFH67+hSfNKLWvQ6gnIDZAnkecJ05moSQ+djFnc7n7H4yncNQ+GegxQeOlMyZnzppMAeZ4i4maz83ri8kk88uDWNekJgDREVhkDiMLHfw+cChc= espen@thinkpad-nixos"
   ];
+
+  home-manager.users.espen = { config, pkgs, ... }: {
+    home.username = "espen";
+    programs.git = {
+      enable = true;
+      userName = "Espen Trydal";
+      userEmail = "espen@trydal.io";
+      extraConfig = {
+        credential.helper = "gopass";
+        init.defaultBranch = "main";
+      };
+    };
+  };
+
+  system.stateVersion = "22.05"; # First install
 }
