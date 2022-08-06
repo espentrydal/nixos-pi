@@ -17,11 +17,11 @@ in
   # Enables the generation of /boot/extlinux/extlinux.conf
   boot.loader.generic-extlinux-compatible.enable = true;
   # !!! Set to specific linux kernel version
-  boot.kernelPackages = pkgs.linuxPackages_5_15;
+  boot.kernelPackages = pkgs.linuxPackages_5_10;
   # !!! Needed for the virtual console to work on the RPi 3, as the default of 16M doesn't seem to be enough.
   # If X.org behaves weirdly (I only saw the cursor) then try increasing this to 256M.
   # On a Raspberry Pi 4 with 4 GB, you should either disable this parameter or increase to at least 64M if you want the USB ports to work.
-  boot.kernelParams = ["cma=256M"];
+  #boot.kernelParams = ["cma=256M"];
   # File systems configuration for using the installer's partition layout
   fileSystems = {
     # Prior to 19.09, the boot partition was hosted on the smaller first partition
@@ -44,7 +44,24 @@ in
 
   # systemPackages
   environment.systemPackages = with pkgs; [
-    bat fzf git git-credential-gopass gnupg htop mosh neovim python ripgrep tailscale tree vim  wget ];
+    avahi
+    bat
+    emacs
+    fzf
+    git
+    git-credential-gopass
+    gnupg
+    gopass
+    htop
+    mosh
+    neovim
+    python
+    ripgrep
+    tailscale
+    tmux
+    tree
+    vim
+    wget ];
 
   programs.zsh = {
       enable = true;
@@ -95,7 +112,7 @@ in
     isNormalUser = true;
     home = "/home/espen";
     description = "Espen Trydal";
-    extraGroups = [ "networkmanager" "wheel" ];
+    extraGroups = [ "wheel" ];
     uid = 1000;
     shell = pkgs.zsh;
   };
