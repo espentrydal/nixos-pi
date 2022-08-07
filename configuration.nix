@@ -12,16 +12,44 @@ in
     (import "${home-manager}/nixos")
   ];
 
-  # NixOS wants to enable GRUB by default
+  boot = {
+    kernelPackages = pkgs.linuxPackages_rpi4;
+    tmpOnTmpfs = true;
+    initrd.availableKernelModules = [ "usbhid" "usb_storage" ];
+    # ttyAMA0 is the serial console broken out to the GPIO
+    kernelParams = [
+        "8250.nr_uarts=1"
+        "console=ttyAMA0,115200"
+        "console=tty1"
+        # A lot GUI programs need this, nearly all wayland applications
+        "cma=128M"
+    ];
+  };
+
+  boot.loader.raspberryPi = {
+    enable = true;
+    version = 4;
+  };
   boot.loader.grub.enable = false;
-  # Enables the generation of /boot/extlinux/extlinux.conf
-  boot.loader.generic-extlinux-compatible.enable = true;
-  # !!! Set to specific linux kernel version
-  boot.kernelPackages = pkgs.linuxPackages_5_10;
-  # !!! Needed for the virtual console to work on the RPi 3, as the default of 16M doesn't seem to be enough.
-  # If X.org behaves weirdly (I only saw the cursor) then try increasing this to 256M.
-  # On a Raspberry Pi 4 with 4 GB, you should either disable this parameter or increase to at least 64M if you want the USB ports to work.
-  #boot.kernelParams = ["cma=256M"];
+
+  # Required for the Wireless firmware
+  #hardware.enableRedistributableFirmware = true;
+
+  nix = {
+    autoOptimiseStore = true;
+    gc = {
+      automatic = true;
+      dates = "weekly";
+      options = "--delete-older-than 30d";
+    };
+    # Free up to 1GiB whenever there is less than 100MiB left.
+    extraOptions = ''
+      min-free = ${toString (100 * 1024 * 1024)}
+      max-free = ${toString (1024 * 1024 * 1024)}
+    '';
+  };
+
+
   # File systems configuration for using the installer's partition layout
   fileSystems = {
     # Prior to 19.09, the boot partition was hosted on the smaller first partition
@@ -40,7 +68,6 @@ in
   };
   # !!! Adding a swap file is optional, but strongly recommended!
   swapDevices = [ { device = "/swapfile"; size = 1024; } ];
-
 
   # systemPackages
   environment.systemPackages = with pkgs; [
@@ -77,7 +104,7 @@ in
   };
 
   # Networking
-  networking.hostName = "pi-nixos"; # Define your hostname.
+  networking.hostName = "pi4-nixos"; # Define your hostname.
   # WiFi
   networking.wireless.enable = true;
   networking.wireless.userControlled.enable = true;
@@ -86,11 +113,15 @@ in
       pskRaw="665af6c0e84f5c29d57e3abcb57ee62002392fb38546e16bc78c2a51d5fcf4b4";
     };
   };
-
   # Avahi
   services.avahi = {
     enable = true;
     nssmdns = true;
+    publish = {
+      enable = true;
+      addresses = true;
+      workstation = true;
+    };
   };
   # OpenSSH
   services.openssh = {
